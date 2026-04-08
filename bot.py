@@ -6,8 +6,9 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 from telegram.constants import ParseMode, ChatAction
 
-TELEGRAM_TOKEN = os.environ[“TELEGRAM_TOKEN”]
-ANTHROPIC_API_KEY = os.environ[“ANTHROPIC_API_KEY”]
+TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"
+]
 
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
