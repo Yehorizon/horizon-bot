@@ -22,6 +22,8 @@ THEMES = {
     6: ('Найважливіше за тиждень', '🔭'),
 }
 
+DAYS = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пʼятниця', 'Субота', 'Неділя']
+
 
 def build_prompt(theme_name: str) -> str:
     today = datetime.now().strftime('%d.%m.%Y')
@@ -48,13 +50,6 @@ def build_prompt(theme_name: str) -> str:
 - Тільки текст брифінгу, без вступу і пояснень від себе"""
 
 
-def escape_md(text: str) -> str:
-    chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
-    for c in chars:
-        text = text.replace(c, f'\\{c}')
-    return text
-
-
 def fetch_briefing(theme_name: str) -> str:
     r = client.messages.create(
         model='claude-haiku-4-5-20251001',
@@ -69,41 +64,10 @@ def fetch_briefing(theme_name: str) -> str:
     return text
 
 
-def fmt(raw_text: str, theme_name: str, theme_icon: str, weekday: int) -> str:
-    days = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пʼятниця', 'Субота', 'Неділя']
-    day_name = days[weekday]
-    today = datetime.now().strftime('%d\\.%m\\.%Y')
-
-    header = (
-        f"*{theme_icon} РАНКОВИЙ БРИФІНГ*\n"
-        f"_{day_name}, {today}_\n"
-        f"*Тема: {escape_md(theme_name)}*\n\n"
-    )
-
-    parts = re.split(r'\n(?=\d+[\.\)])', raw_text.strip())
-
-    body_lines = []
-    for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-        lines = part.split('\n', 1)
-        if len(lines) == 2:
-            title = escape_md(lines[0].strip())
-            content = escape_md(lines[1].strip())
-            body_lines.append(f"*{title}*\n{content}")
-        else:
-            body_lines.append(escape_md(part))
-
-    body = '\n\n'.join(body_lines)
-    footer = f"\n\n——\n_ОБРІЙ\\. Щоранку о 08:00_"
-
-    return header + body + footer
-
-
 async def post_briefing(context):
     weekday = datetime.now().weekday()
     theme_name, theme_icon = THEMES[weekday]
+    today = datetime.now().strftime('%d.%m.%Y')
 
     try:
         raw = await asyncio.get_event_loop().run_in_executor(
@@ -114,34 +78,41 @@ async def post_briefing(context):
         return
 
     if not raw.strip():
-        print('Порожня відповідь від Claude')
+        print('Порожня відповідь')
         return
 
-    text = fmt(raw, theme_name, theme_icon, weekday)
-    chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
+    header = (
+        f"{theme_icon} РАНКОВИЙ БРИФІНГ\n"
+        f"{DAYS[weekday]}, {today}\n"
+        f"Тема: {theme_name}\n"
+        f"{'─' * 30}\n\n"
+    )
+    footer = f"\n\n{'─' * 30}\nОБРІЙ. Щоранку о 08:00"
+    text = header + raw.strip() + footer
 
+    chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
     for chunk in chunks:
         try:
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=chunk,
-                parse_mode='MarkdownV2'
+                text=chunk
             )
         except Exception as e:
             print(f'Помилка надсилання: {e}')
 
 
 async def now(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('⏳ Генерую брифінг\\.\\.\\.', parse_mode='MarkdownV2')
+    await update.message.reply_text('⏳ Генерую брифінг...')
     await post_briefing(context)
-    await update.message.reply_text('✅ Опубліковано в канал\\.', parse_mode='MarkdownV2')
+    await update.message.reply_text('✅ Опубліковано в канал.')
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
-        '*🌅 ОБРІЙ — Ранковий брифінг*\n\n'
-        'Щоранку о 08:00 в канал виходить глибокий навчальний матеріал на основі свіжих подій тижня\\.\n\n'
-        '*Розклад тем:*\n'
+        '🌅 ОБРІЙ — Ранковий брифінг\n\n'
+        'Щоранку о 08:00 в канал виходить глибокий навчальний матеріал '
+        'на основі свіжих подій тижня.\n\n'
+        'Розклад тем:\n'
         '🤝 Пн — Переговори та дипломатія\n'
         '🏛 Вт — Держбудівництво\n'
         '🌍 Ср — Геополітика\n'
@@ -149,9 +120,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         '📜 Пт — Історичні уроки\n'
         '⚡️ Сб — Лідерство\n'
         '🔭 Нд — Найважливіше за тиждень\n\n'
-        '/now \\— опублікувати зараз'
+        '/now — опублікувати зараз'
     )
-    await update.message.reply_text(msg, parse_mode='MarkdownV2')
+    await update.message.reply_text(msg)
 
 
 def main():
