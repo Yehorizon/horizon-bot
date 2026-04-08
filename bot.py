@@ -1,4 +1,3 @@
-
 import os
 import json
 import asyncio
@@ -34,7 +33,7 @@ QUICK_QUESTIONS = [
 
 def fetch_news(region_query):
     response = client.messages.create(
-        model='claude-haiku-4-5-20251001',
+        model='claude-sonnet-4-20250514',
         max_tokens=1000,
         system='You are a geopolitical news aggregator. Find 5 news items and return ONLY a JSON array. Format: [{"title":"...","summary":"...","source":"...","urgency":"high|normal"}]',
         messages=[{'role': 'user', 'content': 'Find 5 current geopolitical news: ' + region_query}],
@@ -59,7 +58,7 @@ def analyze_event(title, summary, source):
 
 def ask_analyst(question):
     response = client.messages.create(
-        model='claude-haiku-4-5-20251001',
+        model='claude-sonnet-4-20250514',
         max_tokens=1000,
         system='You are a senior geopolitical analyst. Answer structured and analytically in Ukrainian.',
         messages=[{'role': 'user', 'content': question}],
