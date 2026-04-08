@@ -59,7 +59,7 @@ def analyze_event(title, summary, source):
 
 def ask_analyst(question):
     response = client.messages.create(
-        model='claude-haiku-4-5-20251001'
+        model='claude-haiku-4-5-20251001',
         max_tokens=1000,
         system='You are a senior geopolitical analyst. Answer structured and analytically in Ukrainian.',
         messages=[{'role': 'user', 'content': question}],
