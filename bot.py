@@ -24,39 +24,60 @@ THEMES = {
 
 DAYS = ['Понеділок', 'Вівторок', 'Середа', 'Четвер', 'Пʼятниця', 'Субота', 'Неділя']
 
+# Телеграм: максимум 4096 символів на повідомлення
+# Ціль — вкластись в одне повідомлення (~3800 з урахуванням хедера/футера)
+MAX_CONTENT_LENGTH = 3600
+
 
 def build_prompt(theme_name: str) -> str:
     today = datetime.now().strftime('%d.%m.%Y')
-    return f"""Ти — експерт з геополітики та державного управління. Пишеш для амбітної молоді, яка хоче стати політиком або дипломатом.
+    return f"""Ти — експерт з геополітики та державного управління. Пишеш для амбітної молоді, яка прагне стати політиком або дипломатом.
 
 Сьогодні {today}. Тема: {theme_name}.
 
-Знайди 5 реальних подій цього тижня на тему "{theme_name}" і створи брифінг.
+Знайди 5 реальних подій цього тижня на тему "{theme_name}" і створи стислий брифінг.
 
 Кожен з 5 пунктів має таку структуру:
 
-**[Коротка назва — до 8 слів]**
-Подія: що сталось (2 речення, просто і конкретно).
-Контекст: чому це важливо стратегічно (2 речення).
-Паралель: схожа історична ситуація і чим закінчилась (2-3 речення).
-Висновок: урок для майбутнього політика (2 речення, спонукай до роздумів).
+── [Коротка назва до 7 слів] ──
+Подія: що сталось (1-2 речення).
+Контекст: чому це важливо (1-2 речення).
+Паралель: схожа історична ситуація (1-2 речення).
+Висновок: урок для політика (1-2 речення).
 
-Пункт 5 — завершується двома реченнями у форматі питання або думки для самоаналізу читача.
+Пункт 5 завершується одним реченням-питанням для самоаналізу.
 
-Правила:
-- Тільки українська мова
-- Жодних службових позначок, технічних символів або нелатинських/некириличних знаків
-- Стиль: розумний, але живий — без зайвого академізму
-- Короткі речення, конкретні факти, реальні імена і дати
-- Тільки сам текст брифінгу — без вступів, пояснень і коментарів від себе"""
+Суворі правила:
+- Лише українська мова — жодних іноземних слів, символів, технічних позначок
+- Жодних китайських, японських чи інших нелатинських/некириличних символів
+- Стиль живий і конкретний — без академічного пафосу
+- Речення короткі, факти точні, імена і дати реальні
+- Весь брифінг має вміститись у 3500 символів — будь стислим
+- Лише текст брифінгу, без вступів і коментарів від себе"""
 
 
 def clean_text(text: str) -> str:
-    # Залишаємо кирилицю, латиницю, цифри, розділові знаки і форматування
-    text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\u0400-\u04FF\u2014\u2013\u2019\u201C\u201D]', '', text)
-    # Прибираємо зайві порожні рядки (більше двох поспіль)
+    # Залишаємо лише кирилицю, латиницю, цифри, розділові знаки, форматування
+    text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\u0400-\u04FF\u2014\u2013\u2019\u201C\u201D\u2018]', '', text)
+    # Прибираємо зайві пробіли та порожні рядки
+    text = re.sub(r' {2,}', ' ', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
+
+
+def trim_to_limit(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    # Обрізаємо по останньому повному реченню в межах ліміту
+    trimmed = text[:limit]
+    last_sentence = max(
+        trimmed.rfind('.'),
+        trimmed.rfind('!'),
+        trimmed.rfind('?'),
+    )
+    if last_sentence > 0:
+        return trimmed[:last_sentence + 1]
+    return trimmed
 
 
 def fetch_briefing(theme_name: str) -> str:
@@ -70,7 +91,9 @@ def fetch_briefing(theme_name: str) -> str:
         tools=[{'type': 'web_search_20250305', 'name': 'web_search'}],
     )
     text = ''.join(b.text for b in r.content if b.type == 'text')
-    return clean_text(text)
+    text = clean_text(text)
+    text = trim_to_limit(text, MAX_CONTENT_LENGTH)
+    return text
 
 
 async def post_briefing(context):
@@ -97,17 +120,22 @@ async def post_briefing(context):
         f"{'─' * 30}\n\n"
     )
     footer = f"\n\n{'─' * 30}\nОБРІЙ. Щоранку о 08:00"
-    text = header + raw + footer
 
-    chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
-    for chunk in chunks:
+    full_text = header + raw + footer
+
+    # Якщо все одно не вміщається — надсилаємо частинами
+    if len(full_text) <= 4096:
         try:
-            await context.bot.send_message(
-                chat_id=CHANNEL_ID,
-                text=chunk
-            )
+            await context.bot.send_message(chat_id=CHANNEL_ID, text=full_text)
         except Exception as e:
             print(f'Помилка надсилання: {e}')
+    else:
+        chunks = [full_text[i:i+4096] for i in range(0, len(full_text), 4096)]
+        for chunk in chunks:
+            try:
+                await context.bot.send_message(chat_id=CHANNEL_ID, text=chunk)
+            except Exception as e:
+                print(f'Помилка надсилання: {e}')
 
 
 async def now(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,7 +147,7 @@ async def now(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         'ОБРІЙ — Ранковий брифінг\n\n'
-        'Щоранку о 08:00 в канал виходить глибокий навчальний матеріал '
+        'Щоранку о 08:00 в канал виходить стислий навчальний матеріал '
         'на основі свіжих подій тижня.\n\n'
         'Розклад тем:\n'
         '🤝 Пн — Переговори та дипломатія\n'
